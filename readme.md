@@ -2,7 +2,7 @@
 ## Generating game art using Generative Adverserial Networks
 
 This repository contains an implementation of a GAN for learning to generate images, which
-I then used to let the AI generate game art of the game "Destiny 2" by training it
+was used to let the AI generate game art of the game "Destiny 2" by training it
 on screenshots of the game.
 The corresponding paper for the GAN architecture by researchers from NVIDIA can be found here: https://arxiv.org/pdf/1710.10196.pdf
 
