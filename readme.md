@@ -4,7 +4,7 @@
 This repository contains an implementation of a GAN for learning to generate images, which
 I then used to let the AI generate game art of the game "Destiny 2" by training it
 on screenshots of the game.
-The corresponding paper by researchers from NVIDIA can be found here: https://arxiv.org/pdf/1710.10196.pdf
+The corresponding paper for the GAN architecture by researchers from NVIDIA can be found here: https://arxiv.org/pdf/1710.10196.pdf
 
 TLDR: The algorithm uses greedy layer-wise pretraining by first learning to generate
 4x4 images, then an additional CNN layer is added (to both generator and discrimantor)
