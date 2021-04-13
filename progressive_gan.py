@@ -11,10 +11,11 @@ from functools import reduce
 import os
 from PIL import Image
 import random
+import gc
 
 #%%
 
-final_img_dim = (256, 256)
+final_img_dim = (128, 128)
 
 
 class BetterMaxUnpool(nn.Module):
@@ -267,7 +268,11 @@ def train_gan(gan, generator_optimizer=None, test_optimizer=None, train_batch_ge
 
     gan.train()
 
-    no_epochs = 100
+    no_epochs = 400
+
+    # alpha_stepsize = np.power(no_epochs, 1 / no_epochs)
+    # print(alpha_stepsize)
+    # alpha = 1 / no_epochs
 
     for epoch in range(no_epochs):
 
@@ -276,12 +281,9 @@ def train_gan(gan, generator_optimizer=None, test_optimizer=None, train_batch_ge
         else:
             alpha = 1.
 
-        # print(torch.rand((9,) + (gan.decoder.latent_shape,)))
-        generated = gan.decoder(torch.normal(0,1, size=(4, gan.decoder.latent_size)).to(device), use_layers, alpha)
-        print('Generated items are similar: {}'.format(torch.allclose(generated[0], generated[1], atol=0.05)))
-
-        plot_samples(generated)
-        del generated
+        if epoch % 20 == 0:
+            # print(torch.rand((9,) + (gan.decoder.latent_shape,)))
+            generate_samples(gan, alpha=alpha, use_layers=use_layers)
 
         losses = []
         for X_batch_discriminator, X_batch_generator in zip(train_batch_generator(batch_size), train_batch_generator(batch_size, use_progressbar=False)):
@@ -311,7 +313,9 @@ def train_gan(gan, generator_optimizer=None, test_optimizer=None, train_batch_ge
             del minimax_loss
             del generator_loss
 
-        time.sleep(1)
+            gc.collect()
+
+        #time.sleep(1)
 
         val_losses = []
 
@@ -325,11 +329,13 @@ def train_gan(gan, generator_optimizer=None, test_optimizer=None, train_batch_ge
             del generator_scores
             del minimax_loss
 
-        print('Average Loss (epoch {}): TRAIN: {}, VAL: {}'.format(epoch, np.mean(losses), np.mean(val_losses)))
-        plt.scatter(range(len(losses)), losses)
-        plt.show()
+            gc.collect()
 
-        time.sleep(1)
+        print('Average Loss (epoch {}): TRAIN: {}, VAL: {}'.format(epoch, np.mean(losses), np.mean(val_losses)))
+        #plt.scatter(range(len(losses)), losses)
+        #plt.show()
+
+        #time.sleep(1)
         try:
             torch.save(gan.state_dict(), 'model-{}-{}.model'.format(final_img_dim, use_layers).replace(' ', ''))
         except:
@@ -341,6 +347,15 @@ def train_gan(gan, generator_optimizer=None, test_optimizer=None, train_batch_ge
 
     return generator_optimizer, test_optimizer
 
+
+def generate_samples(gan, alpha=1., use_layers=None, no_samples=1):
+    for _ in range(no_samples):
+        generated = gan.decoder(torch.normal(0, 1, size=(4, gan.decoder.latent_size)).to(device), use_layers, alpha)
+        #print('Generated items are similar: {}'.format(torch.allclose(generated[0], generated[1], atol=0.05)))
+        plot_samples(generated)
+        del generated
+
+
 #%%
 
 batch_sizes = [64, 48, 32, 24, 16, 8]
@@ -348,6 +363,7 @@ batch_sizes = [64, 48, 32, 24, 16, 8]
 
 def train_gan_progressive(gan, train_filenames, val_filenames):
     current_batch_size_idx = 0
+    generator_optimizer, discriminator_optimizer = None, None
     for use_layers in range(1, len(gan.decoder.deconvs) + 1):
         img_dim = gan.decoder(torch.zeros(1, gan.decoder.latent_size).to(device), use_layers).shape[2:]
         print(f'Training \{img_dim} generator')
@@ -361,22 +377,29 @@ def train_gan_progressive(gan, train_filenames, val_filenames):
                     train_batch_generator = get_images_generator_in_memory(train_filenames, img_dim, cache_in_device=False)
                     val_batch_generator = get_images_generator_in_memory(val_filenames, img_dim, cache_in_device=False)
                 use_alpha = use_layers != 1
-                train_gan(gan, train_batch_generator=train_batch_generator, val_batch_generator=val_batch_generator,
-                          use_layers=use_layers, use_alpha=use_alpha, batch_size=batch_sizes[current_batch_size_idx])
+                generator_optimizer, discriminator_optimizer = train_gan(gan,
+                                                                         train_batch_generator=train_batch_generator,
+                                                                         val_batch_generator=val_batch_generator,
+                                                                         use_layers=use_layers,
+                                                                         use_alpha=use_alpha,
+                                                                         batch_size=batch_sizes[current_batch_size_idx],
+                                                                         generator_optimizer=generator_optimizer,
+                                                                         test_optimizer=discriminator_optimizer)
                 break
             except RuntimeError as e:
                 current_batch_size_idx += 1
                 print('CUDA out of meory. Decreasing batch size to {}'.format(batch_sizes[current_batch_size_idx]))
                 print(e)
+                gc.collect()
 
 
-generaror_kernel_size = [4, 3, 3, 3, 3, 3, 3]
+generaror_kernel_size = [4, 3, 3, 3, 3, 3]
 generator_pooling = [2, 2, 2, 2, 2, 2]
-generator_channels = [128, 128, 128, 128, 128, 128, 128]
+generator_channels = [128, 128, 128, 128, 128, 128]
 
-disc_kernel_size = [3, 3, 3, 3, 3, 3, 4]
-disc_channels = [64, 64, 64, 64, 64, 64, 64]
-disc_pooling = [2, 2, 2, 2, 2, 2]
+disc_kernel_size = [3, 3, 3, 3, 3, 4]
+disc_channels = [64, 64, 64, 64, 64, 64]
+disc_pooling = [2, 2, 2, 2, 2]
 
 
 def get_images_generator(filenames, img_dim):
@@ -425,8 +448,9 @@ test_opt = None
 #val_batch_generator = get_images_generator_in_memory(val, cache_in_device=False, img_dim=final_img_dim)
 
 #%%
-#gan.load_state_dict(torch.load('model-{}-{}.model'.format(tuple(final_img_dim), 7).replace(' ', '')))
+gan.load_state_dict(torch.load('model-{}-{}.model'.format(tuple(final_img_dim), 6).replace(' ', '')))
 #train_gan_progressive(gan, train_batch_generator=get_images_generator_in_memory(train, cache_in_device=False), val_batch_generator=get_images_generator_in_memory(val, cache_in_device=False))
 #train_gan_progressive(gan, train_batch_generator=get_images_generator_in_memory(train), val_batch_generator=get_images_generator_in_memory(val))
-train_gan_progressive(gan, train_filenames=train, val_filenames=val)#, train_batch_generator=get_images_generator(train), val_batch_generator=get_images_generator(val))
-#train_gan(gan, train_batch_generator=get_images_generator_in_memory(train, cache_in_device=False, img_dim=my_img_dim), val_batch_generator=get_images_generator_in_memory(val, cache_in_device=False, img_dim=my_img_dim), use_layers=6)
+#train_gan_progressive(gan, train_filenames=train, val_filenames=val)#, train_batch_generator=get_images_generator(train), val_batch_generator=get_images_generator(val))
+#train_gan(gan, train_batch_generator=get_images_generator_in_memory(train, cache_in_device=False, img_dim=final_img_dim), val_batch_generator=get_images_generator_in_memory(val, cache_in_device=False, img_dim=final_img_dim), use_layers=6)
+generate_samples(gan, no_samples=20)

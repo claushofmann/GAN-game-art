@@ -20,8 +20,12 @@ to generate 8x8 images and so on, up to the desired resolution.
 ### Generated images from GAN
 
 ![](examples/gan_ex1.png)
+(samples from an older version)
+
+![](examples/gan_ex2.png)
+(samples from current version)
 
 
 The images generated GAN quite look like abstract art, nonetheless I am quite
-satsfied that the GAN has learned to capture some structures (Orbit, Weapons)
+satsfied that the GAN has learned to capture some structures (Orbit, Weapons, Enemies)
 and the art style of the game, especially given the high variability in the data.
